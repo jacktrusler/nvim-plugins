@@ -1,6 +1,6 @@
 local M = {}
 
----@class Options750
+---@class Options500
 local defaults = {
     -- uncomment any of the options below, or add other vim.bo options you want to apply
     buffer = {
@@ -16,12 +16,13 @@ local defaults = {
         wrap = true, -- Enable soft wrapping
         linebreak = true, -- Break lines at word boundaries
         showbreak = "↪ ", -- Indicator for wrapped lines
+        spell = true, -- Spellcheck
     },
     split = true, -- If true, will create a buffer as a split, false creates a new buffer window
     words = 500 -- Set the number of words required to get a star ⭐
 }
 
----@type Options750
+---@type Options500
 M.options = nil
 
 function M.setup(options)

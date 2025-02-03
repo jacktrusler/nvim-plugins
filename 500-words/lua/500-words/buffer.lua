@@ -1,4 +1,4 @@
-local config = require("words750.config")
+local config = require("500-words.config")
 local M = {}
 
 M.buf = nil
@@ -12,7 +12,7 @@ end
 
 local function get_stars_arr()
     -- Ignore the first 2 lines and count the rest
-    local dir = vim.fn.expand("~/.local/share/nvim/words750")
+    local dir = vim.fn.expand("~/.local/share/nvim/500-words")
 
     -- Get the current date components
     local current_date = os.date("*t")
@@ -32,7 +32,7 @@ local function get_stars_arr()
         table.insert(starArr, "🟧 ")
     end
     for _, file in ipairs(files) do
-        local filepath = vim.fn.expand("~/.local/share/nvim/words750/2025-02-02.txt")
+        local filepath = vim.fn.expand("~/.local/share/nvim/500-words/" .. os.date("%Y-%m-%d") .. ".txt")
         local lines = vim.fn.readfile(filepath)
         local text = table.concat(lines, " ")
         local word_count = #vim.fn.split(text, "\\W\\+")
@@ -74,8 +74,8 @@ local function create_floating_window()
         relative = "editor",
         width = 21,
         height = 8,
-        row = vim.o.lines - 7,    -- Bottom corner (adjust as needed)
-        col = vim.o.columns - 10, -- Right corner
+        row = vim.o.lines - 7,
+        col = vim.o.columns - 10,
         style = "minimal",
         border = "rounded",
         noautocmd = true,
@@ -147,7 +147,7 @@ local function create(filename, opts)
 end
 
 function M.open()
-    local dir = vim.fn.expand("~/.local/share/nvim/words750")
+    local dir = vim.fn.expand("~/.local/share/nvim/500-words")
     local today = os.date("%Y-%m-%d")
 
     if vim.fn.isdirectory(dir) == 0 then
