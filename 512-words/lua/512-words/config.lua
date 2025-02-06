@@ -1,6 +1,6 @@
 local M = {}
 
----@class Options500
+---@class Options512
 local defaults = {
     -- uncomment any of the options below, or add other vim.bo options you want to apply
     buffer = {
@@ -19,10 +19,10 @@ local defaults = {
         spell = true, -- Spellcheck
     },
     split = true, -- If true, will create a buffer as a split, false creates a new buffer window
-    words = 500 -- Set the number of words required to get a star ⭐
+    words = 0x200 -- (0x200 == 512) Set the number of words required to get a star ⭐
 }
 
----@type Options500
+---@type Options512
 M.options = nil
 
 function M.setup(options)
