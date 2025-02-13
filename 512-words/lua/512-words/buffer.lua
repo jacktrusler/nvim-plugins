@@ -1,9 +1,17 @@
 local config = require("512-words.config")
-local M = {}
 
-M.buf = nil
-M.floating_buf = nil
+---@class Buffer512
+local M = {
+	buf = nil,
+	floating_calendar_buf = nil,
+	floating_calendar_win = nil,
+	floating_words_buf = nil,
+	floating_words_win = nil,
+	init = false,
+	curr_dir = nil,
+}
 
+---@param buf number
 local function split_above(buf)
 	vim.api.nvim_command("split")
 	vim.api.nvim_command("wincmd K")
@@ -11,35 +19,35 @@ local function split_above(buf)
 end
 
 local function get_stars_arr()
-	-- Ignore the first 2 lines and count the rest
-	local dir = vim.fn.expand("~/.local/share/nvim/512-words")
-
-	-- Get the current date components
 	local current_date = os.date("*t")
 	local year, month = current_date.year, current_date.month
-	local firstDayOfMonth = os.date("*t", os.time({ year = year, month = month + 1, day = 1 }))
-	-- Check the last day of the month by getting day 0 of the next month
+
+	local firstDayOfMonth = os.date("*t", os.time({ year = year, month = month, day = 1 }))
 	local lastDayOfMonth = os.date("*t", os.time({ year = year, month = month + 1, day = 0 }))
 
-	local files = vim.fn.readdir(dir)
-	lastDayOfMonth.day = 31
-	local starArr = {}
 	local offset = firstDayOfMonth.wday - 1
+	local dir = vim.fn.expand(M.curr_dir)
+	local files = vim.fn.readdir(dir)
+	local starArr = {}
+
+	-- Prefill so calendar is accurate for the month
 	for _ = 1, offset do
 		table.insert(starArr, "⬜ ")
 	end
 	for _ = 1, lastDayOfMonth.day do
 		table.insert(starArr, "🟧 ")
 	end
+
 	for _, file in ipairs(files) do
-		local filepath = vim.fn.expand("~/.local/share/nvim/512-words/" .. file)
+		local filepath = M.curr_dir .. "/" .. file
 		local lines = vim.fn.readfile(filepath)
 		local text = table.concat(lines, " ")
 		local word_count = #vim.fn.split(text, "\\W\\+")
+
 		local _, _, _, m, d = string.find(file, "(%d+)-(%d+)-(%d+)")
 		local monthNum = tonumber(m)
 		local dayNum = tonumber(d)
-		if (lastDayOfMonth.month == monthNum) and word_count >= config.options.words then
+		if firstDayOfMonth.month == monthNum and word_count >= config.options.words then
 			starArr[dayNum + offset] = "⭐ "
 		end
 	end
@@ -47,11 +55,11 @@ local function get_stars_arr()
 end
 
 local function update_floating_window()
-	if not M.floating_buf then
+	if not M.floating_calendar_buf or not M.floating_calendar_win then
 		return
 	end
 	-- Ignore the first 2 lines and count the rest
-	local lines = vim.api.nvim_buf_get_lines(0, 2, -1, false)
+	local lines = vim.api.nvim_buf_get_lines(M.buf, 2, -1, false)
 	local text = table.concat(lines, " ")
 	local current_date = os.date("*t")
 	local word_count = #vim.fn.split(text, "\\W\\+")
@@ -60,36 +68,51 @@ local function update_floating_window()
 	local arr, offset = get_stars_arr()
 	arr[current_date.day + offset] = (word_count >= config.options.words) and "⭐ " or "🟧 "
 
-	vim.api.nvim_buf_set_lines(M.floating_buf, 0, -1, false, {
+	vim.api.nvim_buf_set_lines(M.floating_calendar_buf, 0, -1, false, {
 		"S  M  T  W  Th F Sat",
 		table.concat(arr, ""),
-		"Word Count: " .. word_count,
+	})
+	vim.api.nvim_buf_set_lines(M.floating_words_buf, 0, -1, false, {
+		" Word Count: " .. word_count,
 	})
 end
 
-local function create_floating_window()
-	local buf = vim.api.nvim_create_buf(false, true) -- Create a scratch buffer
-
-	local opts = {
-		relative = "editor",
-		width = 21,
-		height = 8,
-		row = vim.o.lines - 7,
-		col = vim.o.columns - 10,
-		style = "minimal",
-		border = "rounded",
-		noautocmd = true,
-		focusable = false,
-	}
-
-	M.floating_buf = buf
-
-	local win = vim.api.nvim_open_win(buf, false, opts)
-	vim.api.nvim_win_set_option(win, "winhl", "Normal:NormalFloat")
-
-	return buf
+local function ensure_floating_windows()
+	if not M.floating_calendar_buf then
+		M.floating_calendar_buf = vim.api.nvim_create_buf(false, true)
+	end
+	if not M.floating_words_buf then
+		M.floating_words_buf = vim.api.nvim_create_buf(false, true)
+	end
+	if not M.floating_words_win or not vim.api.nvim_win_is_valid(M.floating_words_win) then
+		M.floating_words_win = vim.api.nvim_open_win(M.floating_words_buf, false, {
+			relative = "editor",
+			width = 17,
+			height = 1,
+			row = vim.o.lines - 80,
+			col = vim.o.columns + 80,
+			style = "minimal",
+			noautocmd = true,
+			focusable = false,
+		})
+	end
+	if not M.floating_calendar_win or not vim.api.nvim_win_is_valid(M.floating_calendar_win) then
+		M.floating_calendar_win = vim.api.nvim_open_win(M.floating_calendar_buf, false, {
+			relative = "editor",
+			width = 21,
+			height = 7,
+			row = vim.o.lines - 7,
+			col = vim.o.columns - 10,
+			style = "minimal",
+			border = "rounded",
+			noautocmd = true,
+			focusable = false,
+		})
+	end
+	update_floating_window()
 end
 
+---@param opts Options512
 local function set_local_opts(opts)
 	for k, v in pairs(opts.buffer or {}) do
 		vim.api.nvim_set_option_value(k, v, { buf = M.buf })
@@ -99,24 +122,45 @@ local function set_local_opts(opts)
 	end
 end
 
-local function init_buffer(opts)
-	set_local_opts(opts)
-	create_floating_window()
-	vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
-		buffer = M.buf,
-		callback = update_floating_window,
-	})
-	vim.api.nvim_create_autocmd("BufLeave", {
-		buffer = M.buf,
-		callback = function()
-			if vim.api.nvim_buf_is_loaded(M.floating_buf) then
-				vim.api.nvim_buf_delete(M.floating_buf, { force = true })
-			end
-		end,
-	})
-	update_floating_window()
+local function close_floating_windows()
+	if vim.api.nvim_win_is_valid(M.floating_calendar_win) then
+		vim.api.nvim_win_close(M.floating_calendar_win, true)
+	end
+	if vim.api.nvim_win_is_valid(M.floating_words_win) then
+		vim.api.nvim_win_close(M.floating_words_win, true)
+	end
 end
 
+local function toggle_floating_window()
+	if vim.api.nvim_win_is_valid(M.floating_calendar_win) then
+		vim.api.nvim_win_close(M.floating_calendar_win, true)
+	else
+		ensure_floating_windows()
+	end
+end
+
+---@param opts Options512
+local function init_buffer(opts)
+	set_local_opts(opts)
+	vim.keymap.set("n", opts.floating_calendar_keybind, toggle_floating_window, { buffer = M.buf })
+	ensure_floating_windows()
+
+	-- Apply autocommands to buffer
+	local autocommands = {
+		{ events = { "TextChanged", "TextChangedI" }, callback = update_floating_window },
+		{ events = "BufEnter", callback = ensure_floating_windows },
+		{ events = "BufLeave", callback = close_floating_windows },
+	}
+
+	for _, cmd in ipairs(autocommands) do
+		vim.api.nvim_create_autocmd(cmd.events, { buffer = M.buf, callback = cmd.callback })
+	end
+
+	M.init = true
+end
+
+---@param filepath string
+---@param opts Options512
 local function reopen(filepath, opts)
 	if opts.split then
 		vim.api.nvim_command("split")
@@ -125,17 +169,17 @@ local function reopen(filepath, opts)
 	vim.api.nvim_command("edit " .. filepath)
 	M.buf = vim.api.nvim_get_current_buf()
 
-	init_buffer(opts)
+	if not M.init then
+		init_buffer(opts)
+	end
 end
 
+---@param opts Options512
+---@param filename string
 local function create(filename, opts)
 	local lines = { os.date("%A %B %d, %Y"), "", "" }
-
 	local buf = vim.api.nvim_create_buf(true, false)
-	if not buf or buf == 0 then
-		print("Error: Failed to create buffer")
-		return
-	end
+
 	M.buf = buf
 
 	vim.api.nvim_buf_set_lines(M.buf, 0, -1, false, lines)
@@ -147,20 +191,25 @@ local function create(filename, opts)
 		vim.api.nvim_set_current_buf(M.buf)
 	end
 
-	init_buffer(opts)
-
+	if not M.init then
+		init_buffer(opts)
+	end
 	vim.api.nvim_win_set_cursor(0, { 3, 0 })
 end
 
 function M.open()
-	local dir = vim.fn.expand("~/.local/share/nvim/512-words")
 	local today = os.date("%Y-%m-%d")
+	local yearMonth = os.date("%Y-%m")
+	local storage_dir = vim.fn.expand(config.options.storage_directory)
+	local dir_yearMonth = storage_dir .. "/512-words/" .. tostring(yearMonth)
 
-	if vim.fn.isdirectory(dir) == 0 then
-		vim.fn.mkdir(dir, "p")
+	if vim.fn.isdirectory(dir_yearMonth) == 0 then
+		vim.fn.mkdir(dir_yearMonth, "p")
 	end
 
-	local filepath = dir .. "/" .. today .. ".txt"
+	M.curr_dir = dir_yearMonth
+
+	local filepath = dir_yearMonth .. "/" .. today .. ".txt"
 	if vim.fn.filereadable(filepath) == 1 then
 		reopen(filepath, config.options)
 	else
